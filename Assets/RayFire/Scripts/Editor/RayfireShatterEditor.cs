@@ -1531,7 +1531,7 @@ namespace RayFireEditor
             {
                 EditorGUI.BeginChangeCheck();
                 Vector3 pos               = new Vector3 (resizeHandles[i].x, resizeHandles[i].y, 0);
-                var fmh_1534_73_638785091909421640 = Quaternion.identity; Vector3 newHandlePosition = Handles.FreeMoveHandle(pos, 10f, Vector2.zero, Handles.RectangleHandleCap);
+                var fmh_1534_73_638791076490408103 = Quaternion.identity; Vector3 newHandlePosition = Handles.FreeMoveHandle(pos, 10f, Vector2.zero, Handles.RectangleHandleCap);
                 if (EditorGUI.EndChangeCheck())
                 {
                     UpdateRectBasedOnHandle(i, new Vector2 (newHandlePosition.x, newHandlePosition.y));
