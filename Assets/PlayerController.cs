@@ -12,28 +12,28 @@ public class PlayerController : FirstPersonCharacter
     public Transform joint;
     public float bobSpeed = 10f;
     public Vector3 bobAmount = new Vector3(.15f, .05f, 0f);
-    
+
     public Transform cameraTransform;
     private Vector3 originalCameraPos;
-    
+
     private float originalHeight;
     private Vector3 originalCenter;
     private Vector3 originalCameraLocalPos;
-    
+
     [SerializeField] private CapsuleCollider capsule;
-    
+
     public float slideCameraHeight = -0.5f;
     public float slideColliderHeight = 1.0f;
     public Vector3 slideColliderCenter = new Vector3(0, 0.5f, 0);
 
-    [Header("Sliding Parameters")] 
-    public KeyCode slideKey = KeyCode.LeftShift;
+    [Header("Sliding Parameters")] public KeyCode slideKey = KeyCode.LeftShift;
 
-    [Header("Wall Run Settings")]
-    public float wallRunDuration = 1.5f;
+    [Header("Wall Run Settings")] public float wallRunDuration = 1.5f;
     public float wallRunGravity = 1f;
     public float wallRunSpeed = 10f;
     public float wallCheckDistance = 1f;
+    public float jumpImpulseStrength = 12f;
+    public float wallRaycastHeight = 2f;
 
     private float wallRunTimer;
     private bool isWallRunning;
@@ -41,15 +41,13 @@ public class PlayerController : FirstPersonCharacter
 
     private Vector3 jointOriginalPos;
     private float timer = 0;
-    
-    [Header("Wall Run Camera Effects")]
-    public float wallRunTilt = 15f;
+
+    [Header("Wall Run Camera Effects")] public float wallRunTilt = 15f;
     public float tiltSmoothSpeed = 5f;
     private float targetTilt = 0f;
     private float currentTilt = 0f;
 
-    [Space(15.0f)]
-    public float slideImpulse = 20.0f;
+    [Space(15.0f)] public float slideImpulse = 20.0f;
     public float slideDownAcceleration = 20.0f;
 
     enum ECustomMovementMode
@@ -104,7 +102,7 @@ public class PlayerController : FirstPersonCharacter
     protected virtual void CheckSlideInput()
     {
         bool isSliding = IsSliding();
-        bool wantsToSlide =  Input.GetKey(slideKey);
+        bool wantsToSlide = Input.GetKey(slideKey);
 
         if (!isSliding && wantsToSlide && CanSlide())
         {
@@ -181,8 +179,11 @@ public class PlayerController : FirstPersonCharacter
     {
         base.CustomMovementMode(deltaTime);
 
-        if (customMovementMode == (int)ECustomMovementMode.Sliding){}
-            SlidingMovementMode(deltaTime);
+        if (customMovementMode == (int)ECustomMovementMode.Sliding)
+        {
+        }
+
+        SlidingMovementMode(deltaTime);
     }
 
     private void Start()
@@ -193,7 +194,7 @@ public class PlayerController : FirstPersonCharacter
         originalCenter = capsule.center;
         originalCameraPos = cameraTransform.localPosition;
         jointOriginalPos = joint.localPosition;
-        
+
     }
 
     public void Update()
@@ -205,9 +206,10 @@ public class PlayerController : FirstPersonCharacter
             HeadBob();
         }
 
+
         currentTilt = Mathf.Lerp(currentTilt, targetTilt, Time.deltaTime * tiltSmoothSpeed);
         cameraTransform.localRotation = Quaternion.Euler(0f, 0f, currentTilt);
-        
+
     }
 
     public void FixedUpdate()
@@ -243,23 +245,39 @@ public class PlayerController : FirstPersonCharacter
             return;
         }
 
-        if (!isWallRunning && CheckForWall(out wallNormal))
+        if (!isWallRunning && !IsGrounded() && CheckForWall(out wallNormal))
         {
             StartWallRun();
         }
 
         if (isWallRunning)
         {
+            if (Input.GetKeyDown("space"))
+            {
+                WallRunJump();
+            }
+
             wallRunTimer -= Time.deltaTime;
             if (wallRunTimer <= 0f || !CheckForWall(out wallNormal))
             {
                 StopWallRun();
+                IsJumping();
             }
         }
+
     }
 
     private void StartWallRun()
     {
+        if (characterMovement.velocity.y > 0)
+        {
+            characterMovement.velocity = new Vector3(
+                characterMovement.velocity.x,
+                Mathf.Min(characterMovement.velocity.y, 1f), // empêche de voler trop haut
+                characterMovement.velocity.z
+            );
+        }
+
         isWallRunning = true;
         wallRunTimer = wallRunDuration;
         gravityScale = wallRunGravity;
@@ -269,8 +287,6 @@ public class PlayerController : FirstPersonCharacter
         {
             wallDirection = -wallDirection;
         }
-
-        characterMovement.velocity = wallDirection * wallRunSpeed;
 
         float side = Vector3.Dot(wallNormal, transform.right);
         targetTilt = side > 0 ? -wallRunTilt : wallRunTilt;
@@ -286,7 +302,7 @@ public class PlayerController : FirstPersonCharacter
     private bool CheckForWall(out Vector3 hitNormal)
     {
         RaycastHit hit;
-        Vector3 origin = transform.position;
+        Vector3 origin = transform.position + Vector3.up * wallRaycastHeight;
         Vector3 right = transform.right;
         Vector3 left = -transform.right;
 
@@ -306,5 +322,21 @@ public class PlayerController : FirstPersonCharacter
 
         hitNormal = Vector3.zero;
         return false;
+    }
+
+    private void WallRunJump()
+    {
+        // direction parallèle au mur
+        Vector3 wallDirection = Vector3.Cross(Vector3.up, wallNormal);
+        if (Vector3.Dot(wallDirection, GetForwardVector()) < 0)
+            wallDirection = -wallDirection;
+
+        // direction combinée : vers l'avant + haut + un peu de recul
+        Vector3 jumpDirection = (wallDirection * 1.2f + Vector3.up * 1f + wallNormal * 0.2f).normalized;
+
+        // appliquer l'impulsion
+        characterMovement.velocity = jumpDirection * jumpImpulseStrength;
+
+        StopWallRun();
     }
 }
