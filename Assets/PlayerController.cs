@@ -201,9 +201,20 @@ public class PlayerController : FirstPersonCharacter
     {
         HandleWallRun();
         CheckForWall(out Vector3 hitNormal);
-        if (enableHeadBob)
+        if (enableHeadBob && !IsSliding())
         {
-            HeadBob();
+            if (IsGrounded())
+            {
+                HeadBob();
+            }
+            else if (isWallRunning)
+            {
+                WallRunBob(); // une nouvelle méthode à créer
+            }
+            else
+            {
+                ResetHeadBob();
+            }
         }
 
 
@@ -235,7 +246,11 @@ public class PlayerController : FirstPersonCharacter
                 Mathf.Lerp(joint.localPosition.z, jointOriginalPos.z, Time.deltaTime * bobSpeed));
         }
     }
-
+    private void ResetHeadBob()
+    {
+        timer = 0;
+        joint.localPosition = Vector3.Lerp(joint.localPosition, jointOriginalPos, Time.deltaTime * bobSpeed);
+    }
     private void HandleWallRun()
     {
         if (IsGrounded())
@@ -338,5 +353,14 @@ public class PlayerController : FirstPersonCharacter
         characterMovement.velocity = jumpDirection * jumpImpulseStrength;
 
         StopWallRun();
+    }
+    private void WallRunBob()
+    {
+        timer += Time.deltaTime * (bobSpeed + GetSpeed()); // un bob plus smooth
+        joint.localPosition = new Vector3(
+            jointOriginalPos.x + Mathf.Sin(timer) * bobAmount.x * 0.5f,
+            jointOriginalPos.y + Mathf.Cos(timer * 0.5f) * bobAmount.y * 0.3f,
+            jointOriginalPos.z
+        );
     }
 }
