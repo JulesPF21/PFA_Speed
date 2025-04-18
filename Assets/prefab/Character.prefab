@@ -76,6 +76,7 @@ GameObject:
   - component: {fileID: 4280788489814597717}
   - component: {fileID: 7900968715716289819}
   - component: {fileID: 7637470194733880207}
+  - component: {fileID: 3665740383956650972}
   m_Layer: 2
   m_Name: Camera
   m_TagString: Untagged
@@ -202,6 +203,49 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
+--- !u!114 &3665740383956650972
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2483942363115575554}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6aae98af4160c3f44a105545f7b49970, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  showRay: 1
+  axis: 2
+  target: {fileID: 0}
+  maxDistance: 50
+  rounds: 2
+  rate: 0.3
+  showHit: 1
+  type: 1
+  strength: 10
+  radius: 1
+  offset: 0
+  demolishCluster: 1
+  affectInactive: 1
+  rigid: 1
+  rigidRoot: 1
+  rigidBody: 1
+  damage: 100
+  pShardTp: 0
+  debris: 1
+  dust: 1
+  flash: 0
+  Flash:
+    intensityMin: 0.5
+    intensityMax: 0.7
+    rangeMin: 5
+    rangeMax: 7
+    distance: 0.4
+    color: {r: 1, g: 1, b: 0.8, a: 1}
+  mask: -1
+  tagFilter: Untagged
+  shooting: 0
 --- !u!1 &2718970422624113764
 GameObject:
   m_ObjectHideFlags: 0
@@ -376,10 +420,10 @@ MonoBehaviour:
   _maxWalkSpeed: 20
   _minAnalogWalkSpeed: 0
   _maxAcceleration: 10
-  _brakingDecelerationWalking: 1
-  _groundFriction: 1.02
+  _brakingDecelerationWalking: 0.02
+  _groundFriction: 8
   _canEverCrouch: 1
-  _crouchedHeight: 1.25
+  _crouchedHeight: 0.75
   _unCrouchedHeight: 2
   _maxWalkSpeedCrouched: 3
   _maxFallSpeed: 40
@@ -421,11 +465,11 @@ MonoBehaviour:
   bobAmount: {x: 0.15, y: 0.15, z: 0}
   cameraTransform: {fileID: 4307520518435901054}
   capsule: {fileID: 2315898337049555844}
-  slideCameraHeight: -0.5
-  slideColliderHeight: 1
+  slideCameraHeight: -1
+  slideColliderHeight: 0.5
   slideColliderCenter: {x: 0, y: 0.5, z: 0}
   slideKey: 306
-  wallRunDuration: 1.5
+  wallRunDuration: 5555
   wallRunGravity: 0.05
   wallRunSpeed: 20
   wallCheckDistance: 1
@@ -447,6 +491,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a06adc1714ca3a249b6c23a3aedb16d1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  rayfireGun: {fileID: 3665740383956650972}
   weapon:
     name: awp
     damage: 10
