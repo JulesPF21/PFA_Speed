@@ -26,13 +26,19 @@ public class PlayerController : FirstPersonCharacter
     public float slideColliderHeight = 1.0f;
     public Vector3 slideColliderCenter = new Vector3(0, 0.5f, 0);
 
-    [Header("Sliding Parameters")] public KeyCode slideKey = KeyCode.LeftShift;
-
+    [Header("Sliding Parameters")] 
+    public KeyCode slideKey = KeyCode.LeftShift;
+    public float slideImpulse = 20.0f;
+    public float slideDownAcceleration = 20.0f;
+    public float slideGravity = 3f;
+    
     [Header("Wall Run Settings")] public float wallRunDuration = 1.5f;
     public float wallRunGravity = 1f;
     public float wallRunSpeed = 10f;
     public float wallCheckDistance = 1f;
     public float jumpImpulseStrength = 12f;
+    private bool applyWallJumpNextFrame = false;
+    private Vector3 pendingWallJumpVelocity;
     public float wallRaycastHeight = 2f;
 
     private float wallRunTimer;
@@ -47,8 +53,7 @@ public class PlayerController : FirstPersonCharacter
     private float targetTilt = 0f;
     private float currentTilt = 0f;
 
-    [Space(15.0f)] public float slideImpulse = 20.0f;
-    public float slideDownAcceleration = 20.0f;
+    
 
     enum ECustomMovementMode
     {
@@ -77,14 +82,20 @@ public class PlayerController : FirstPersonCharacter
 
     protected virtual bool CanSlide()
     {
-        if (!IsGrounded())
-            return false;
-
         float sqrSpeed = velocity.sqrMagnitude;
         float slideSpeedThreshold = maxWalkSpeedCrouched * maxWalkSpeedCrouched;
 
-        return sqrSpeed >= slideSpeedThreshold * 1.02f;
+        if (IsGrounded())
+        {
+            return sqrSpeed >= slideSpeedThreshold * 1.02f;
+        }
+        else
+        {
+            // En l’air, on autorise le slide direct tant que tu tombes
+            return velocity.y < -0.1f;
+        }
     }
+
 
     protected virtual Vector3 CalcSlideDirection()
     {
@@ -104,7 +115,7 @@ public class PlayerController : FirstPersonCharacter
         bool isSliding = IsSliding();
         bool wantsToSlide = Input.GetKey(slideKey);
 
-        if (!isSliding && wantsToSlide && CanSlide())
+        if (wantsToSlide && !isSliding && CanSlide())
         {
             SetMovementMode(MovementMode.Custom, (int)ECustomMovementMode.Sliding);
         }
@@ -122,7 +133,7 @@ public class PlayerController : FirstPersonCharacter
         {
             Vector3 slideDirection = CalcSlideDirection();
             characterMovement.velocity += slideDirection * slideImpulse;
-
+            gravityScale = slideGravity;
             SetRotationMode(RotationMode.None);
 
             capsule.height = slideColliderHeight;
@@ -136,11 +147,13 @@ public class PlayerController : FirstPersonCharacter
 
         if (wasSliding)
         {
+            gravityScale = 1f;
             cameraTransform.localPosition = originalCameraPos;
             SetRotationMode(RotationMode.None);
             capsule.height = originalHeight;
             capsule.center = originalCenter;
             joint.localPosition = originalCameraLocalPos;
+            
 
             if (IsFalling())
             {
@@ -166,10 +179,16 @@ public class PlayerController : FirstPersonCharacter
         characterMovement.velocity =
             CalcVelocity(characterMovement.velocity, desiredVelocity, groundFriction * 0.2f, false, deltaTime);
 
-        Vector3 slideDownDirection =
-            Vector3.ProjectOnPlane(GetGravityDirection(), characterMovement.groundNormal).normalized;
-
-        characterMovement.velocity += slideDownAcceleration * deltaTime * slideDownDirection;
+        if (IsGrounded())
+        {
+            Vector3 slideDownDirection =
+                Vector3.ProjectOnPlane(GetGravityDirection(), characterMovement.groundNormal).normalized;
+            characterMovement.velocity += gravityScale * deltaTime * slideDownDirection;
+        }
+        else
+        {
+            characterMovement.velocity += gravityScale * deltaTime * GetGravityDirection();
+        }
 
         if (applyStandingDownwardForce)
             ApplyDownwardsForce();
@@ -181,9 +200,8 @@ public class PlayerController : FirstPersonCharacter
 
         if (customMovementMode == (int)ECustomMovementMode.Sliding)
         {
+            SlidingMovementMode(deltaTime);
         }
-
-        SlidingMovementMode(deltaTime);
     }
 
     private void Start()
@@ -225,6 +243,12 @@ public class PlayerController : FirstPersonCharacter
 
     public void FixedUpdate()
     {
+        if (applyWallJumpNextFrame)
+        {
+            characterMovement.velocity = pendingWallJumpVelocity;
+            applyWallJumpNextFrame = false;
+            Debug.Log("Applied Wall Jump Velocity: " + pendingWallJumpVelocity);
+        }
         Health = GetSpeed() * 5f;
     }
 
@@ -341,16 +365,15 @@ public class PlayerController : FirstPersonCharacter
 
     private void WallRunJump()
     {
-        // direction parallèle au mur
         Vector3 wallDirection = Vector3.Cross(Vector3.up, wallNormal);
         if (Vector3.Dot(wallDirection, GetForwardVector()) < 0)
             wallDirection = -wallDirection;
 
-        // direction combinée : vers l'avant + haut + un peu de recul
-        Vector3 jumpDirection = (wallDirection * 1.2f + Vector3.up * 1f + wallNormal * 0.2f).normalized;
+        Vector3 jumpDirection = (wallDirection * 1.2f + Vector3.up * 2f + wallNormal * 0.3f).normalized;
 
-        // appliquer l'impulsion
-        characterMovement.velocity = jumpDirection * jumpImpulseStrength;
+        // Prépare l'impulsion à appliquer au prochain FixedUpdate
+        pendingWallJumpVelocity = jumpDirection * (jumpImpulseStrength * 1.5f);
+        applyWallJumpNextFrame = true;
 
         StopWallRun();
     }
