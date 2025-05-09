@@ -3,11 +3,13 @@ using ECM2;
 using ECM2.Examples.FirstPerson;
 using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.VFX;
 
 public class PlayerController : FirstPersonCharacter
 {
     public float Health = 100f;
     
+    public VisualEffect speedEffect;
     public AudioSource jumpSound;
     public AudioSource landingSound;
     private bool wasGroundedLastFrame = true;
@@ -89,6 +91,7 @@ public class PlayerController : FirstPersonCharacter
 
     public void Update()
     {
+        speedEffect.SetFloat("SpawnRate", GetSpeed() * 2f);
         playerCamera.fieldOfView = fov + GetSpeed();
         if (!wasGroundedLastFrame && IsGrounded())
         {
@@ -215,9 +218,8 @@ public class PlayerController : FirstPersonCharacter
             return sqrSpeed >= slideSpeedThreshold * 1.02f;
         }
         else
-        {
-            // En l’air, on autorise le slide direct tant que tu tombes
-            return velocity.y < -0.1f;
+            
+        {return true;
         }
     }
 
@@ -456,12 +458,12 @@ public class PlayerController : FirstPersonCharacter
         Debug.DrawRay(origin, right * wallCheckDistance, Color.red);
         Debug.DrawRay(origin, left * wallCheckDistance, Color.blue);
 
-        if (Physics.Raycast(origin, right, out hit, wallCheckDistance) && LayerMask.LayerToName(hit.collider.gameObject.layer) == "Wall")
+        if (Physics.Raycast(origin, right, out hit, wallCheckDistance, wallLayer))
         {
             hitNormal = hit.normal;
             return true;
         }
-        else if (Physics.Raycast(origin, left, out hit, wallCheckDistance) && LayerMask.LayerToName(hit.collider.gameObject.layer) == "Wall")
+        else if (Physics.Raycast(origin, left, out hit, wallCheckDistance, wallLayer))
         {
             hitNormal = hit.normal;
             return true;
@@ -479,7 +481,7 @@ public class PlayerController : FirstPersonCharacter
         if (Vector3.Dot(wallDirection, GetForwardVector()) < 0)
             wallDirection = -wallDirection;
 
-        Vector3 jumpDirection = (wallDirection * 1.2f + Vector3.up * 2f + wallNormal * 0.3f).normalized;
+        Vector3 jumpDirection = (wallDirection * 2f + Vector3.up * 2f + wallNormal * 0.3f).normalized;
         
         pendingWallJumpVelocity = jumpDirection * (jumpImpulseStrength * 1.5f);
         applyWallJumpNextFrame = true;
