@@ -7,7 +7,15 @@ using UnityEngine;
 public class PlayerController : FirstPersonCharacter
 {
     public float Health = 100f;
-
+    
+    public AudioSource jumpSound;
+    public AudioSource landingSound;
+    private bool wasGroundedLastFrame = true;
+    public AudioSource stepSound;
+    private float stepTimer = 0f;
+    public float stepInterval = 0.4f;
+    public float baseStepSpeed = 5f;
+    
     public bool enableHeadBob = true;
     public Transform joint;
     public float bobSpeed = 10f;
@@ -15,7 +23,9 @@ public class PlayerController : FirstPersonCharacter
 
     public Transform cameraTransform;
     private Vector3 originalCameraPos;
-
+    public Camera playerCamera;
+    public float fov = 60f;
+    
     private float originalHeight;
     private Vector3 originalCenter;
     private Vector3 originalCameraLocalPos;
@@ -32,7 +42,8 @@ public class PlayerController : FirstPersonCharacter
     public float slideDownAcceleration = 20.0f;
     public float slideGravity = 3f;
     
-    [Header("Wall Run Settings")] public float wallRunDuration = 1.5f;
+    [Header("Wall Run Settings")] 
+    public float wallRunDuration = 1.5f;
     public float wallRunGravity = 1f;
     public float wallRunSpeed = 10f;
     public float wallCheckDistance = 1f;
@@ -48,14 +59,128 @@ public class PlayerController : FirstPersonCharacter
     private Vector3 jointOriginalPos;
     private float timer = 0;
 
-    [Header("Wall Run Camera Effects")] public float wallRunTilt = 15f;
+    [Header("Wall Run Camera Effects")] 
+    public float wallRunTilt = 15f;
     public float tiltSmoothSpeed = 5f;
     private float targetTilt = 0f;
     private float currentTilt = 0f;
+    
+    [Header("Ledge Propulsion")]
+    [SerializeField] private float ledgeCheckDistance = 0.6f;
+    [SerializeField] private float propulsionSpeed = 10f;
+    [SerializeField] private float propulsionDuration = 0.2f;
+    [SerializeField] private LayerMask wallLayer;
 
+    private bool isPropelling = false;
+    private float propulsionTimer;
+    private Vector3 propulsionDirection;
+    private bool canPropelFromLedge = true;
+   
+    private void Start()
+    {
+        capsule = GetComponent<CapsuleCollider>();
+        useSeparateBrakingDeceleration = true;
+        originalHeight = capsule.height;
+        originalCenter = capsule.center;
+        originalCameraPos = cameraTransform.localPosition;
+        jointOriginalPos = joint.localPosition;
+
+    }
+
+    public void Update()
+    {
+        playerCamera.fieldOfView = fov + GetSpeed();
+        if (!wasGroundedLastFrame && IsGrounded())
+        {
+            if (landingSound && !landingSound.isPlaying)
+                landingSound.Play();
+        }
+        if (_isJumping)
+            jumpSound.Play();
+        wasGroundedLastFrame = IsGrounded();
+        HandleWallRun();
+        HandleWallRunFootsteps();
+        if (!isPropelling)
+            CheckLedgePropulsion();
+
+        if (isPropelling)
+        {
+            propulsionTimer -= Time.deltaTime;
+            if (propulsionTimer <= 0f)
+                isPropelling = false;
+            else
+                characterMovement.velocity = propulsionDirection * propulsionSpeed;
+        }
+        CheckForWall(out Vector3 hitNormal);
+        if (enableHeadBob && !IsSliding())
+        {
+            if (IsGrounded())
+            {
+                HeadBob();
+            }
+            else if (isWallRunning)
+            {
+                WallRunBob();
+            }
+            else
+            {
+                ResetHeadBob();
+            }
+            if (IsGrounded() && GetSpeed() > 0.1f)
+            {
+                stepSound.pitch = Mathf.Lerp(0.8f, 1.4f, GetSpeed() / maxWalkSpeed);
+            }
+            else
+            {
+                stepSound.pitch = 1f;
+            }
+        }
     
 
-    enum ECustomMovementMode
+        currentTilt = Mathf.Lerp(currentTilt, targetTilt, Time.deltaTime * tiltSmoothSpeed);
+        cameraTransform.localRotation = Quaternion.Euler(0f, 0f, currentTilt);
+
+    }
+    
+    public void FixedUpdate()
+    {
+        if (applyWallJumpNextFrame)
+        {
+            characterMovement.velocity = pendingWallJumpVelocity;
+            applyWallJumpNextFrame = false;
+            Debug.Log("Applied Wall Jump Velocity: " + pendingWallJumpVelocity);
+        }
+        Health = GetSpeed() * 5f;
+    }
+    
+    private void CheckLedgePropulsion()
+    {
+        // Check mur devant à hauteur torse
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
+        bool wallInFront = Physics.Raycast(origin, transform.forward, ledgeCheckDistance, wallLayer);
+
+        // Check espace au-dessus
+        bool spaceAbove = !Physics.Raycast(origin + Vector3.up * 1f, transform.forward, ledgeCheckDistance, wallLayer);
+
+        bool isNearLedge = wallInFront && spaceAbove;
+
+        if (isNearLedge && Input.GetKeyDown(KeyCode.Space) && canPropelFromLedge)
+        {
+            isPropelling = true;
+            propulsionTimer = propulsionDuration;
+            propulsionDirection = (transform.forward + Vector3.up * 0.75f).normalized;
+
+            canPropelFromLedge = false;
+            Invoke(nameof(ResetLedgePropulsion), 0.5f);
+        }
+    }
+    
+    private void ResetLedgePropulsion()
+    {
+        canPropelFromLedge = true;
+    }
+    
+ enum ECustomMovementMode
     {
         Sliding = 1
     }
@@ -83,7 +208,7 @@ public class PlayerController : FirstPersonCharacter
     protected virtual bool CanSlide()
     {
         float sqrSpeed = velocity.sqrMagnitude;
-        float slideSpeedThreshold = maxWalkSpeedCrouched * maxWalkSpeedCrouched;
+        float slideSpeedThreshold = GetSpeed() * maxWalkSpeedCrouched;
 
         if (IsGrounded())
         {
@@ -96,7 +221,7 @@ public class PlayerController : FirstPersonCharacter
         }
     }
 
-
+    
     protected virtual Vector3 CalcSlideDirection()
     {
         Vector3 slideDirection = GetMovementDirection();
@@ -133,7 +258,8 @@ public class PlayerController : FirstPersonCharacter
         {
             Vector3 slideDirection = CalcSlideDirection();
             characterMovement.velocity += slideDirection * slideImpulse;
-            gravityScale = slideGravity;
+            if (!IsGrounded())
+                gravityScale = slideGravity;
             SetRotationMode(RotationMode.None);
 
             capsule.height = slideColliderHeight;
@@ -204,76 +330,58 @@ public class PlayerController : FirstPersonCharacter
         }
     }
 
-    private void Start()
-    {
-        capsule = GetComponent<CapsuleCollider>();
-        useSeparateBrakingDeceleration = true;
-        originalHeight = capsule.height;
-        originalCenter = capsule.center;
-        originalCameraPos = cameraTransform.localPosition;
-        jointOriginalPos = joint.localPosition;
-
-    }
-
-    public void Update()
-    {
-        HandleWallRun();
-        CheckForWall(out Vector3 hitNormal);
-        if (enableHeadBob && !IsSliding())
-        {
-            if (IsGrounded())
-            {
-                HeadBob();
-            }
-            else if (isWallRunning)
-            {
-                WallRunBob(); // une nouvelle méthode à créer
-            }
-            else
-            {
-                ResetHeadBob();
-            }
-        }
-
-
-        currentTilt = Mathf.Lerp(currentTilt, targetTilt, Time.deltaTime * tiltSmoothSpeed);
-        cameraTransform.localRotation = Quaternion.Euler(0f, 0f, currentTilt);
-
-    }
-
-    public void FixedUpdate()
-    {
-        if (applyWallJumpNextFrame)
-        {
-            characterMovement.velocity = pendingWallJumpVelocity;
-            applyWallJumpNextFrame = false;
-            Debug.Log("Applied Wall Jump Velocity: " + pendingWallJumpVelocity);
-        }
-        Health = GetSpeed() * 5f;
-    }
-
     private void HeadBob()
     {
-        if (GetSpeed() > 1 && IsGrounded() && !IsSliding())
+        float speed = GetSpeed();
+
+        if (speed > 1f && IsGrounded() && !IsSliding())
         {
-            timer += Time.deltaTime * (bobSpeed + GetSpeed());
-            joint.localPosition = new Vector3(jointOriginalPos.x + Mathf.Sin(timer) * bobAmount.x,
+            timer += Time.deltaTime * (bobSpeed + speed);
+            joint.localPosition = new Vector3(
+                jointOriginalPos.x + Mathf.Sin(timer) * bobAmount.x,
                 jointOriginalPos.y + Mathf.Sin(timer) * bobAmount.y,
-                jointOriginalPos.z + Mathf.Sin(timer) * bobAmount.z);
+                jointOriginalPos.z + Mathf.Sin(timer) * bobAmount.z
+            );
+            
+            stepTimer += Time.deltaTime * speed;
+            
+            float dynamicStepInterval = Mathf.Clamp(baseStepSpeed / speed, 0.1f, 1.2f);
+
+            if (stepTimer >= dynamicStepInterval && !stepSound.isPlaying)
+            {
+                stepSound.Play();
+                stepTimer = 0f;
+            }
         }
         else
         {
-            timer = 0;
-            joint.localPosition = new Vector3(
-                Mathf.Lerp(joint.localPosition.x, jointOriginalPos.x, Time.deltaTime * bobSpeed),
-                Mathf.Lerp(joint.localPosition.y, jointOriginalPos.y, Time.deltaTime * bobSpeed),
-                Mathf.Lerp(joint.localPosition.z, jointOriginalPos.z, Time.deltaTime * bobSpeed));
+            timer = 0f;
+            stepTimer = 0f;
+            joint.localPosition = Vector3.Lerp(joint.localPosition, jointOriginalPos, Time.deltaTime * bobSpeed);
         }
     }
     private void ResetHeadBob()
     {
         timer = 0;
         joint.localPosition = Vector3.Lerp(joint.localPosition, jointOriginalPos, Time.deltaTime * bobSpeed);
+    }
+    private float wallStepTimer = 0f;
+
+    private void HandleWallRunFootsteps()
+    {
+        if (!isWallRunning || GetSpeed() < 1f)
+            return;
+
+        wallStepTimer -= Time.deltaTime;
+
+        float interval = Mathf.Lerp(0.5f, 0.15f, GetSpeed() / wallRunSpeed); // dépend de la vitesse
+
+        if (wallStepTimer <= 0f)
+        {
+            stepSound.pitch = Mathf.Lerp(0.9f, 1.3f, GetSpeed() / wallRunSpeed);
+            stepSound.Play();
+            wallStepTimer = interval;
+        }
     }
     private void HandleWallRun()
     {
@@ -348,12 +456,12 @@ public class PlayerController : FirstPersonCharacter
         Debug.DrawRay(origin, right * wallCheckDistance, Color.red);
         Debug.DrawRay(origin, left * wallCheckDistance, Color.blue);
 
-        if (Physics.Raycast(origin, right, out hit, wallCheckDistance))
+        if (Physics.Raycast(origin, right, out hit, wallCheckDistance) && LayerMask.LayerToName(hit.collider.gameObject.layer) == "Wall")
         {
             hitNormal = hit.normal;
             return true;
         }
-        else if (Physics.Raycast(origin, left, out hit, wallCheckDistance))
+        else if (Physics.Raycast(origin, left, out hit, wallCheckDistance) && LayerMask.LayerToName(hit.collider.gameObject.layer) == "Wall")
         {
             hitNormal = hit.normal;
             return true;
@@ -365,25 +473,15 @@ public class PlayerController : FirstPersonCharacter
 
     private void WallRunJump()
     {
-        // Garde la direction du wall run
+        if (jumpSound && !jumpSound.isPlaying)
+            jumpSound.Play();
         Vector3 wallDirection = Vector3.Cross(Vector3.up, wallNormal);
         if (Vector3.Dot(wallDirection, GetForwardVector()) < 0)
             wallDirection = -wallDirection;
 
-        // Récupère la vélocité actuelle
-        Vector3 currentVelocity = characterMovement.velocity;
-
-        // Ajoute un boost vertical sans toucher trop au horizontal
-        Vector3 jumpVelocity = currentVelocity;
-
-        // Boost vertical
-        jumpVelocity.y = Mathf.Max(jumpImpulseStrength, currentVelocity.y + jumpImpulseStrength * 0.8f);
-
-        // Optionnel : petit coup dans la direction du mur pour un peu de "punch"
-        jumpVelocity += wallNormal * 2f;
-
-        // Prépare le jump
-        pendingWallJumpVelocity = jumpVelocity;
+        Vector3 jumpDirection = (wallDirection * 1.2f + Vector3.up * 2f + wallNormal * 0.3f).normalized;
+        
+        pendingWallJumpVelocity = jumpDirection * (jumpImpulseStrength * 1.5f);
         applyWallJumpNextFrame = true;
 
         StopWallRun();
