@@ -365,14 +365,25 @@ public class PlayerController : FirstPersonCharacter
 
     private void WallRunJump()
     {
+        // Garde la direction du wall run
         Vector3 wallDirection = Vector3.Cross(Vector3.up, wallNormal);
         if (Vector3.Dot(wallDirection, GetForwardVector()) < 0)
             wallDirection = -wallDirection;
 
-        Vector3 jumpDirection = (wallDirection * 1.2f + Vector3.up * 2f + wallNormal * 0.3f).normalized;
+        // Récupère la vélocité actuelle
+        Vector3 currentVelocity = characterMovement.velocity;
 
-        // Prépare l'impulsion à appliquer au prochain FixedUpdate
-        pendingWallJumpVelocity = jumpDirection * (jumpImpulseStrength * 1.5f);
+        // Ajoute un boost vertical sans toucher trop au horizontal
+        Vector3 jumpVelocity = currentVelocity;
+
+        // Boost vertical
+        jumpVelocity.y = Mathf.Max(jumpImpulseStrength, currentVelocity.y + jumpImpulseStrength * 0.8f);
+
+        // Optionnel : petit coup dans la direction du mur pour un peu de "punch"
+        jumpVelocity += wallNormal * 2f;
+
+        // Prépare le jump
+        pendingWallJumpVelocity = jumpVelocity;
         applyWallJumpNextFrame = true;
 
         StopWallRun();
