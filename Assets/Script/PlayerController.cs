@@ -39,6 +39,9 @@ public class PlayerController : FirstPersonCharacter
     public Vector3 slideColliderCenter = new Vector3(0, 0.5f, 0);
 
     [Header("Sliding Parameters")] 
+    [SerializeField] private Animator anim;
+    
+    [Header("Sliding Parameters")] 
     public KeyCode slideKey = KeyCode.LeftShift;
     public float slideImpulse = 20.0f;
     public float slideDownAcceleration = 20.0f;
@@ -66,6 +69,8 @@ public class PlayerController : FirstPersonCharacter
     public float tiltSmoothSpeed = 5f;
     private float targetTilt = 0f;
     private float currentTilt = 0f;
+    public Transform playerBody;
+    public Transform tiltTransform;
     
     [Header("Ledge Propulsion")]
     [SerializeField] private float ledgeCheckDistance = 0.6f;
@@ -98,8 +103,16 @@ public class PlayerController : FirstPersonCharacter
             if (landingSound && !landingSound.isPlaying)
                 landingSound.Play();
         }
+
         if (_isJumping)
+        {
             jumpSound.Play();
+            anim.SetBool ("Jump", true);
+        }
+        else
+        {
+            anim.SetBool ("Jump", false);
+        }    
         wasGroundedLastFrame = IsGrounded();
         HandleWallRun();
         HandleWallRunFootsteps();
@@ -138,10 +151,21 @@ public class PlayerController : FirstPersonCharacter
                 stepSound.pitch = 1f;
             }
         }
-    
 
+        if (IsSliding())
+        {
+            anim.SetBool ("Slide", true);
+        }
+        else
+        {
+            anim.SetBool ("Slide", false);
+        }
+        
         currentTilt = Mathf.Lerp(currentTilt, targetTilt, Time.deltaTime * tiltSmoothSpeed);
-        cameraTransform.localRotation = Quaternion.Euler(0f, 0f, currentTilt);
+        Quaternion tiltRot = Quaternion.Euler(0f, 0f, currentTilt);
+        tiltTransform.localRotation = tiltRot;
+
+
 
     }
     
