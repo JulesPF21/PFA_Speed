@@ -10,6 +10,7 @@ public class PlayerController : FirstPersonCharacter
     public float Health = 100f;
     
     public VisualEffect speedEffect;
+    
     public AudioSource jumpSound;
     public AudioSource landingSound;
     private bool wasGroundedLastFrame = true;
@@ -93,9 +94,11 @@ public class PlayerController : FirstPersonCharacter
         jointOriginalPos = joint.localPosition;
 
     }
+    private float autoWalkDuration = 2f;
 
     public void Update()
     {
+        
         speedEffect.SetFloat("SpawnRate", GetSpeed() * 2f);
         playerCamera.fieldOfView = fov + GetSpeed();
         if (!wasGroundedLastFrame && IsGrounded())
@@ -164,8 +167,7 @@ public class PlayerController : FirstPersonCharacter
         currentTilt = Mathf.Lerp(currentTilt, targetTilt, Time.deltaTime * tiltSmoothSpeed);
         Quaternion tiltRot = Quaternion.Euler(0f, 0f, currentTilt);
         tiltTransform.localRotation = tiltRot;
-
-
+        
 
     }
     
@@ -175,8 +177,14 @@ public class PlayerController : FirstPersonCharacter
         {
             characterMovement.velocity = pendingWallJumpVelocity;
             applyWallJumpNextFrame = false;
-            Debug.Log("Applied Wall Jump Velocity: " + pendingWallJumpVelocity);
         }
+
+        if (autoWalkDuration > 0f)
+        {
+            autoWalkDuration -= Time.fixedDeltaTime;
+            characterMovement.velocity = transform.forward * maxWalkSpeed;
+        }
+
         Health = GetSpeed() * 5f;
     }
     
@@ -322,6 +330,8 @@ public class PlayerController : FirstPersonCharacter
     {
         base.OnBeforeSimulationUpdate(deltaTime);
         CheckSlideInput();
+        
+        
     }
 
     protected virtual void SlidingMovementMode(float deltaTime)
